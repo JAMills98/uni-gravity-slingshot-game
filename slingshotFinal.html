@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+
+<html>
+<html lang="en">
+
+<head>
+	<meta charset = "UTF-8">
+	<title> Slingshot v0.2, by Jack Mills </title>
+	
+	<style type="text/css">
+	canvas 
+	{
+	background: linear-gradient(to left, black , rgb(64, 4, 32) );
+	position:absolute;
+	width: 100%;
+	height: 100%;
+	image-rendering:-moz-crisp-edges;
+	image-rendering: pixelated;
+
+	}
+	
+	
+	html, body 
+	{
+	
+	margin: 0px;
+	overflow:hidden;
+	width: 100%
+	height: 100%
+	opacity: 44;
+	transition: 0.7s opacity;
+	}
+	
+	
+	</style>
+	
+</head>
+
+<body>
+	<canvas>
+	Your browser cannot display this game, please update your browser or enable JavaScript to play.
+	</canvas>
+	
+	<script> 
+	var canvas = document.querySelector('canvas');
+var c = canvas.getContext('2d');
+c.imageSmoothingEnable = false;
+c.webkitImageSmoothingEnabled = false;
+
+dw = 1920/3
+dh = 1080/3
+
+hx = dw/2
+hy = dh/2
+
+dr = dw/dh // RATIO Between Width and Height, multiplies Height by this amount
+
+gw = dw
+gh = dh
+canvas.width = gw
+canvas.height = gh
+
+						
+// OBJ - Stars
+function Star(x, y, maxlife)
+{
+	this.x = x;
+	this.y = y;
+	
+	this.life = 0;
+	this.maxlife = maxlife;
+	this.lifeSpeed = 1/128
+	
+	this.rise = true;
+	
+	
+	this.dist = Math.random()
+	this.riseLife = function(amount)
+	{
+		if (this.rise)
+		{
+			this.life += amount
+			if (this.life >= maxlife)
+			{
+				this.life = maxlife;
+				this.rise = false;
+			}
+		}
+		
+		else
+		{
+			this.life -=amount
+		}
+		
+	}
+	
+	
+}
+
+// Create initial stars
+starArray = [];
+
+for (var i = 0; i < gh; i++)
+{
+	starArray.push(new Star(Math.floor(Math.random() * gw), Math.floor(Math.random() * gh), Math.random()));
+}
+
+
+// SOUND FILES
+// OBJ - Trail: Lingers behind the player, simply a circle
+// How they work:
+// OBJ - Generic Functions
+function Generic()
+{
+	
+
+	
+	this.debug = function(obj)
+	{
+		c.fillStyle = "green";
+
+
+		for (var i= 0; i < Object.keys(obj).length; i++)
+		{
+			cparam = Object.keys(obj)[i];
+			if (typeof cparam === "function")
+			{
+				c.fillText(cparam ,0, 10 + (10 * i))
+			}
+		}
+		
+	}
+	
+	this.getXVector = function(ang)
+	{
+		if (this.vel != 0)
+		{
+			return Math.cos(ang)
+		}
+	}
+	
+	this.getYVector = function(ang)
+	{
+		if (this.vel != 0)
+		{
+			return Math.sin(ang)
+		}
+	}
+
+}
+generic = new Generic();
+
+// HUD
+function HUD()
+{
+	this.renderBoxes = function()
+	{
+	
+	}
+	
+	this.renderPowerups = function()
+	{
+	
+	
+	}
+}
+
+hud = new HUD();
+
+// OBJ - Camera
+// The Camera represents the Screen-Space as a whole
+// The CENTER of the screen is the X/Y Position
+// OBJ - Camera
+function Camera()
+{
+	this.x = canvas.width/2
+	this.y = canvas.height/2
+	this.zoom = 1
+	
+	this.move = function(xvel, yvel)
+	{
+		this.x += xvel
+		this.y += yvel
+	}
+	
+	// CAMERA.FUNC = Set Offset: Set X/Y move relative to center of screen
+	this.setOffset = function(myX, myY)
+	{
+		this.x = myX + (canvas.width/2)
+		this.y = myY + (canvas.height/2)
+	}
+	
+	// CAMERA.FUNC = Set Size, set Width/Height of viewport
+	this.setSize = function(myW, myH)
+	{
+		canvas.width = myW;
+		canvas.height = myH;
+		gw = canvas.width
+		gh = canvas.height
+		this.clampSize();
+		hx = canvas.width/2
+		hy = canvas.height/2
+		
+	}
+	
+	// CAMERA.FUNC = Limit size to prevent undersizing, etc
+	this.clampSize = function()
+	{
+		// Min/Max Zoom Values
+		minW = dw/2
+		maxW = dw * 2
+		minH = dh/2
+		maxH = dh * 2
+
+		if (gw < minW)
+		{
+			
+			gw = minW
+			canvas.width = gw
+		}
+		
+		else if (gw > maxW)
+		{
+			gw = maxW
+			canvas.width = gw
+		}
+		
+		if (gh < minH)
+		{
+			gh = minH
+			canvas.height = gh
+		}
+		
+		else if (gh > maxH)
+		{
+			gh = maxH
+			canvas.height = gh
+		}
+	}
+	
+	
+	// CAMERA.FUNC = Return size of viewport
+	this.getSize = function()
+	{
+		return [canvas.width, canvas.height]
+	}
+	
+	// CAMERA.FUNC = Return ratio between Width and Height should always be DW/DH
+	this.getRatio = function()
+	{
+		return (canvas.width/canvas.height)
+	}
+	
+	// CAMERA.FUNC = Set camera to PLAYER
+	this.center = function()
+	{
+		this.setOffset(plyr.x, plyr.y);
+	}
+	
+	// CAMERA.FUNC = Set camera to 0,0 for debugging, etc.
+	this.origin = function()
+	{
+		this.setOffset(0, 0);
+	}
+	
+}
+
+cam = new Camera()
+
+
+
+// OBJ - Player
+function Player() {
+	
+	this.score = 0			   // 	How many points the player has
+	this.speed = 0.3 	      // 	Player BASE Speed - Increases over time
+	this.powerMult = 1 	     //		Multiplication Factor of Speed
+	this.x = 0 			    // 		X Position in World
+	this.y = 0		       //  		Y Position in World
+	this.xVel = 0	      // 		X Vector Force
+	this.yVel = 0 	     // 		Y Vector Force
+	this.tVel = 0 		// 			Total Velocity
+	this.width = 2	   // 			This is my size
+	this.powerup = 1 // 			0 = No Powerup : 1 = Bore, 2: Tether, 3: Teleport, 4: Boost
+	this.dead = false// 			Is player in gameover state?
+	this.invulnerable = false 		// If invulnerable: Player cannot collide with planets and is not affected by gravity but CAN die to The Void
+	this.boring = false 	// If BORING! then next planet you touch blows up if you touch it
+	this.boreFrames = 0		// How long bore lasts for
+	this.frozen = false // IF Frozen in Time - Used for Powerup 2
+	this.noGravFrames = 0
+	this.noGrav = false
+	
+	
+	this.kill = function()
+	{
+	this.x = 0
+	this.y = 0
+	this.xVel = 0
+	this.yVel = 0
+	}
+	// How long the bore lasts for
+	this.bore = function(frames)
+	{
+		this.xVel = 0
+		this.yVel = 0
+		this.boreFrames = frames
+		this.boring = true
+	}
+	
+	this.noGravOn = function(frames)
+	{
+		this.noGrav = !this.noGrav
+	}
+	
+	
+	this.noGravTest = function()
+	{
+	
+	if (this.noGrav)
+	{
+		c.fillStyle = "red"
+		c.fillText("Gravity Disabled!", hx - 40, hy + 40)
+	}
+	
+	
+	}
+	
+	this.boreTest = function()
+	{
+	if (this.boreFrames > 0)
+	{
+		c.fillStyle = "red"
+		c.fillText("Boring Enabled!", hx - 40, hy + 50)
+		c.beginPath()
+		c.strokeStyle = "#FF0050"
+		c.moveTo(hx, hy)
+		c.lineTo(hx - this.xVel * 12, hy - this.yVel * 12)
+
+		c.stroke()
+		this.boreFrames -= 1
+	}
+	
+	else
+	{
+	this.boring = false
+	}
+	
+	}
+	
+	// General Function to check if Player is on the Camera in case of offsets
+	this.onCamera = function()
+	{
+		if (this.x > cam.x - hx && this.x < cam.x + hx && this.y > cam.y - hy && this.y < cam.y + hy)
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	
+	}
+	
+	
+	this.freeze = function()
+	{
+		this.frozen = true;
+		this.xVel *= 1.5
+		this.yVel *= 1.5
+	}
+
+	
+	
+	
+	
+	this.revive = function()
+	{
+		this.dead = false
+	}
+	
+	this.renderSelf = function()
+	{
+		c.beginPath()
+		c.fillStyle = "white"
+		c.strokeStyle = "#00FF0055"
+		c.arc(hx, hy, this.width + 1, 0, 2*Math.PI);
+		c.stroke()
+		c.beginPath()
+		c.arc(hx, hy, this.width, 0, 2*Math.PI);
+		c.fill()
+		
+	}
+	
+	this.renderTrail = function()
+	{
+		// Number of circles depends on speed
+		for (var i= 0; i < Math.floor(this.vel); i++)
+		{
+			c.beginPath()
+			c.fillStyle = "white";
+			c.arc(hx + i, hy + i, this.width/i, 0, 2*Math.PI);
+			c.fill()
+		}
+	}
+	
+	
+	
+
+	
+	
+	this.movingUp = function()
+	{
+		if (this.velAngle < 0)
+		{
+			return true
+		}
+		
+		else
+		{
+			return false;
+		}
+		
+	}
+	
+	this.movingRight = function()
+	{
+		if (this.velAngle > -(Math.PI/2) && this.velAngle < (Math.PI/2) )
+		{
+			return true
+		}
+		
+		else
+		{
+			return false;
+		}
+		
+	}
+	
+	this.addVelocity = function(xAmount, yAmount, force)
+	{
+		
+		
+		if (!this.frozen)
+		{
+		// Add X Forces
+		this.xVel += (xAmount * force) / fpsDiff
+
+		// Add Y Forces
+		this.yVel += (yAmount * force) / fpsDiff
+		}
+		
+		
+		// Don't worry, it'll snap to 0 eventually I promise
+		// If it doesn't, takes about 10 minutes to die anyway
+
+		
+		// Absolute Max Speed = addVelocity * 50 (It sounded weird but it's Potato Paradox Math)
+	}
+	
+	this.addFriction = function()
+	{
+	// Add X Friction & Snap both to 0 if they slow down too much
+		if (!this.frozen)
+		{
+		this.xVel *= 0.979
+		// And Y Friction
+		this.yVel *= 0.979
+		}
+	}
+	
+	this.debug = function()
+	{
+		c.fillText("X: " +this.x +"|Y: " +this.y , 25, 40);
+		c.fillText("xVel: " +this.xVel +" | yVel: " +this.yVel +" | tVel: " +this.tVel , 25, 50);
+		c.fillText("myPowerup: " +this.powerup , 25, 60);
+	}
+	
+	// Now, based on ALL Vectors applied on a frame, move the player.
+	this.finalMove = function()
+	{
+		if (!this.frozen)
+		{
+			this.x -= this.xVel;
+			this.y -= this.yVel;
+		this.tVel = Math.sqrt(Math.pow(Math.abs(plyr.xVel),2) + Math.pow(Math.abs(plyr.yVel),2))
+		}
+	}
+	
+	
+	
+}
+plyr = new Player()
+
+
+// Misc Vars.
+xMult = 0
+yMult = 0
+
+
+
+
+
+// OBJ - Gravity Well
+function GravityWell(x, y, ir, or, f, col, solid, harvest)
+{
+	this.x 		= x
+	this.y 		= y
+	this.or 	= or
+	this.ir	 	= ir
+	this.f 		= f
+	this.col 	= col
+	this.isSolid 	= solid 	// "Solid" Planets allow the player to tether and bore through
+	this.canHarvest = harvest 	// "Harvestable" bodies allow the player to improve themselves by standing next to them
+	this.distToPlayer = ir
+	//this.vr 	= or 	- Temporary: Consider this as Virtual Radius; this is the radius of the Warning
+
+	// If gravityWell is off-screen, display a preview of it to warn players that it's ahead
+	this.drawWarning = function()
+	{
+		if (this.x + cam.x + or > - ir * 3 - 400 && this.x + cam.x - or < gw + ir * 3 + 400 && this.y + cam.y + or > -ir * 3 - 400 && this.y + cam.y  - or < gh + ir *3 + 400)
+		{
+			// Draw bubble on edge of screen and arrow pointing to where it is
+			
+			cX = this.x + cam.x
+
+			if (cX > canvas.width - (20 + (this.ir/4)))
+			{
+			cX = canvas.width - (20 + (this.ir/4))
+			}
+			
+			else if (cX < (20 + (this.ir/4)))
+			{
+			cX = (20 + (this.ir/4))
+			}
+			
+			cY = this.y + cam.y
+			
+			if (cY > canvas.height - (20 + (this.ir/4)))
+			{
+			cY = canvas.height - (20 + (this.ir/4))
+			}
+			
+			else if (cY < (20 + (this.ir/4)))
+			{
+			cY = (20 + (this.ir/4))
+			}
+			
+			
+			// Draw warning circle
+			c.beginPath()
+			c.fillStyle = "#FF0000AA"
+			c.arc(cX, cY, 10 + (this.ir/4) , 0, 2 * Math.PI);
+			c.fill()
+			
+			// Draw body that's up next
+			c.beginPath()
+			c.strokeStyle = "black";
+			c.fillStyle = col
+			c.arc(cX, cY, 2 + (this.ir/6), 0, 2 * Math.PI);
+			c.stroke()
+			c.fill()
+			
+			
+		}
+	}
+	
+	
+	
+	
+	// Test if Well is On-Screen
+	this.onCamera = function()
+	{
+		
+		// IF Gravity Well Ring can be drawn, show it
+		if (this.x + cam.x + or > 0 && this.x + cam.x - or < gw && this.y + cam.y + or > 0 && this.y + cam.y  - or < gh)
+		{
+			this.renderor()
+		}
+		
+		else
+		{
+			this.drawWarning()
+		}
+		
+		// IF Inner Planet can be drawn, show it
+		if (this.x + cam.x + ir > 0 && this.x + cam.x - ir < gw && this.y + cam.y + ir > 0 && this.y + cam.y - ir < gh)
+		{
+			
+			this.renderir()
+		}
+		
+		
+		// IF Player is inside the outer radius, do simple line test
+		if (this.x + cam.x + or - hx > 0 && this.x + cam.x - or + hx < gw && this.y + cam.y + or - hy > 0 && this.y + cam.y  - or + hy < gh)
+		{
+
+			this.lineTest()
+		}
+		
+	
+	}
+	
+	this.renderir = function()
+	{
+		// Draw Inner Planet
+		c.strokeStyle = "black"
+		c.fillStyle = col;
+		c.setLineDash([3,1]);
+		c.beginPath()
+		
+		c.arc(this.x + cam.x, this.y + cam.y, this.ir, 0, 2 * Math.PI);
+		c.fill()
+		c.stroke()
+		c.setLineDash([0,0]);
+		
+	}
+	
+	this.renderor = function()
+	{
+		
+		// Draw OUTER GRadius
+		c.beginPath()
+		c.setLineDash([3,6]);
+		c.strokeStyle = "white"
+		c.arc(this.x + cam.x, this.y + cam.y, this.or, 0, 2 * Math.PI);
+		c.stroke()
+		
+		c.setLineDash([1,2]);
+		c.strokeStyle = "red"
+		c.beginPath()
+		c.fillStyle = "#FFFFFF22";
+		c.arc(this.x + cam.x, this.y + cam.y, this.or, 0, 2 * Math.PI);
+		c.fill()
+		
+		// Draw Danger Zone
+		// If my force is greater than Player's Speed * MultPower
+		// Draw zone where at that point, a STANDSTILL results in being unable to escape without flings
+		if (this.f > (plyr.speed * plyr.powerMult) )
+		{
+
+			c.beginPath()
+			c.fillStyle = "#FF200060";
+			// ESTIMATE Death Zone size as The point where a straight line wouldn't help you BUT times by sqrt(2) because it's an estimate and diagonal and because it cannot factor for outward speeds, just ABSOLUTE stillness
+			cSize = this.or * ( 1 - ( (plyr.speed * plyr.powerMult) / this.f) )
+			if (cSize > this.or)
+			{
+				cSize = this.or
+			}
+			c.arc(this.x + cam.x, this.y + cam.y, cSize, 0, 2 * Math.PI);
+			c.strokeStyle = "orange";
+			c.stroke();
+			c.fill()
+			
+		}
+		c.setLineDash([0, 0]);
+		
+		
+	}
+	
+
+	
+	// Get Distance to Player
+	this.lineTest = function()
+	{
+		
+		if (! plyr.noGrav)
+		{
+
+		// Force is a quarter circle from center to edge
+		this.distToPlayer = Math.sqrt( Math.pow( plyr.x + this.x , 2) + Math.pow(plyr.y + this.y, 2) )
+		// If Player is drilling through
+		
+		
+		if (this.distToPlayer < or)
+		{
+			
+		// Draw Line to Planet
+		/*
+		c.beginPath()
+		c.strokeStyle = "cyan"
+		c.moveTo(hx, hy);
+		c.lineTo(this.x + cam.x, this.y + cam.y);
+		c.stroke();
+		*/
+		
+		// Formula: SINE [ (pi/2) - ( (pi/2) / (outerRadius / distance) ) ]
+		// GForce is close enough as is, Force is a Perfect Curve
+		gForce = this.f * Math.sin( (Math.PI / 2) - ( (Math.PI / 2) / (or / this.distToPlayer)))
+
+		// Get RELATIVE Distance between PLAYER and GWell, then atan2 them.
+		gDeltaX =  this.x + plyr.x
+		gDeltaY =  this.y + plyr.y
+		
+		gAngle = Math.atan2(gDeltaY, gDeltaX)
+		
+		// Add this speed when pressing down
+		plyr.addVelocity(Math.cos(gAngle), Math.sin(gAngle), gForce)
+		
+		// Debug Text
+		/*
+		c.fillText("d2p: " +this.distToPlayer, canvas.width/2, canvas.height/2 + 64);
+		c.fillText("gForce: " + (gForce) +"/" +(this.f) , canvas.width/2, canvas.height/2 + 80);
+		c.fillText("angTo: " + (gAngle), canvas.width/2, canvas.height/2 + 96);
+		c.fillText("gDeltas: " +(gDeltaX) +"," +(gDeltaY) , canvas.width/2, canvas.height/2 + 112);
+		c.fillText("gDeltaMults: " +Math.cos(gAngle) * gForce +"," +Math.sin(gAngle) * gForce, canvas.width/2, canvas.height/2 + 128);
+		c.fillText("isBore: " +this.isSolid +" | canHarvest: " +this.canHarvest, canvas.width/2, canvas.height/2 + 140);
+		*/
+		}
+		
+		// If Player touches inner planet
+		if (this.distToPlayer < ir && !plyr.boring)
+		{
+			c.fillStyle = "red"
+			c.fillText("You should be dead!", hx - 50, canvas.height/2 + 64);
+		}
+		}
+		
+	}
+	
+
+}
+
+// X, Y, IR, OR, F,
+// Good Forces - LowSpeed = 4ish
+
+// Generic Gravity Stuff
+gravity_planet_dense		= new GravityWell(200, 0, 6, 75, 0.725, "#222334", true, false); // Very small but very strong; telegraphed as dangerous, good for boosting
+gravity_planet_rocky_small = new GravityWell(400, 0, 12, 150, 0.3, "#5570FF", true, false); // Near useless, very weak gravity field
+gravity_planet_rocky_radioactive = new GravityWell(600, 0, 32, 300, 0.595, "#40AE40", true, true); // Strong Field, Requires a single fling to get out, can slow you down, only harvestable planet
+
+
+// Non Boreable
+gravity_planet_gas_small = new GravityWell(0, 500, 42, 400, 0.5, "#CCAAFF", false, false);	// Normal Field  has a safe zone
+gravity_planet_gas_big = new GravityWell(-600, 600, 75, 550, 0.55, "#FF7733", false, false);	// Normal Field  has a safe zone
+gravity_star_small = new GravityWell(-500, -600, 75, 550, 0.55, "#CCAA00", false, true); 	//
+gravity_star_red = new GravityWell(-1200, -500, 75, 550, 0.55, "#770000", false, true);
+
+// Esoteric/Killer
+gravity_black_hole = new GravityWell(1100, -600, 5, 600, 2, "#000000", false, false);
+gravity_white_hole = new GravityWell(250, -1000, 20, 300, -7, "#FFFFFF", false, false);;
+
+gravityArray = [gravity_planet_dense, gravity_planet_rocky_small, gravity_planet_rocky_radioactive, gravity_planet_gas_small, gravity_planet_gas_big, gravity_star_small, gravity_star_red, gravity_black_hole, gravity_white_hole];
+
+
+
+
+
+
+// OBJ - Mouse Wheel Controls
+window.addEventListener('wheel', function(e) {
+	
+// Scroll Up
+  if (e.deltaY < 0) {
+    cam.setSize(gw *= 0.9, gh *= 0.9)
+  }
+  // Scrol Down
+  if (e.deltaY > 0) {
+    cam.setSize(gw *= 1.1, gh *= 1.1)
+  }
+});
+
+
+// OBJ - Mouse Move Controls
+var tmouse = {
+	x: dw/2,
+	y: dh/2
+}
+var mouse = {
+	x: innerWidth/2,
+	y: innerHeight/2
+}
+window.addEventListener('mousemove', function(event) { mouse.x = event.x ; mouse.y = event.y;});
+
+// LMD = Left Mouse Down and RMD = Right Mouse Down
+lmd = false
+rmd = false
+
+function mdown(e) {
+	if (e.button === 2) {
+		rmd = true;
+		} else if (e.button === 0) {
+			lmd = true;
+
+				}
+			}
+
+
+function mup(e) {
+	if (e.button === 2) {
+			rmd = false;	
+	}
+	else if (e.button === 0) {
+		lmd = false;
+	}
+			
+}
+
+
+// kXd = Key X Down
+k_W = 87
+kWd = false
+k_A = 65
+kAd = false
+k_S = 83
+kSd = false
+k_D = 68
+kDd = false
+
+// ZOOM Code but for Keyboard, - zooms out, = (+) zooms in, 0 resets
+// Scroll wheel can also do it
+window.addEventListener("keydown", function(e) {
+	
+	// Scroll Up
+	  if (e.keyCode === 61) {
+		cam.setSize(gw *= 0.9, gh *= 0.9)
+	  }
+	  // Scroll Down
+	  if (e.keyCode === 173) {
+		cam.setSize(gw *= 1.1, gh *= 1.1)
+	  }
+	  
+	  if (e.keyCode === 48) {
+		cam.setSize(dw, dh)
+	  }
+	  
+	  // Powerups
+	  if (e.keyCode === 49) {
+		plyr.powerup = 1
+	  }
+	  
+	  if (e.keyCode === 50) {
+		plyr.powerup = 2
+	  }
+	  
+	  if (e.keyCode === 51) {
+		plyr.powerup = 3
+	  }
+	  
+	  if (e.keyCode === 52) {
+		plyr.powerup = 4
+	  }
+  
+	if (e.keyCode === k_W)
+	{
+		kWd = true;
+	}
+			
+	else if (e.keyCode === k_A){
+			kAd = true;}
+	else if (e.keyCode === k_S){
+			kSd = true}
+	else if (e.keyCode === k_D){
+			kDd = true}
+			
+
+	});
+
+window.addEventListener("keyup", function(e) {
+	
+	if (e.keyCode === k_W)
+	{
+		kWd = false;
+	}
+			
+	else if (e.keyCode === k_A){
+			kAd = false;}
+	else if (e.keyCode === k_S){
+			kSd = false}
+	else if (e.keyCode === k_D){
+			kDd = false}
+			
+
+	});
+
+// Uncomment e.preventDefault to disable context menu on right click
+document.addEventListener('mousedown', mdown);
+document.addEventListener('mouseup', mup);
+document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+});
+
+
+// Initialize Canvas
+
+
+/*
+FrameRate Code
+FPS is determined by 1000 Milliseconds divided by FPS
+Game constantly checks time and if time difference between last frame and now > interval, render a new frame.
+FPS won't go over 60; I can't compromise the game's speed when FPS drops because resizing sometimes bugs the framerate, super multiplying the frame.
+*/
+var basefps = 60;
+var fps = 60;
+var now;
+var then = Date.now();
+var interval = 1000/fps;
+var delta;
+
+
+
+// Test XPos/ YPos
+tx = 0
+ty = 0
+
+
+
+// Begin GAME LOOP
+function animate()
+{
+	
+	
+
+	requestAnimationFrame(animate);
+	now = Date.now();
+	
+	delta = now - then;
+	
+	// Interval = 1000ms / FPS
+	if (delta > interval)
+	{
+		
+		
+		fpsDiff = fps/basefps
+		// Update Order: Canvas -> Camera -> Player -> Trails/Stars, etc. -> Render
+		
+		// UPD8 - Canvas | Order: Check Time -> Clear Screen AS IS
+		then = now - (delta % interval);
+		c.clearRect(0, 0, canvas.width, canvas.height);
+		
+		
+		
+		
+		
+		// UPD8 - Relative Mouse Position from the Player's Origin to the Mouse's Position in the WORLD
+		tmouse.x = Math.floor(mouse.x * (canvas.width/innerWidth) + ((dw-canvas.width)/2) - (dw/2))
+		tmouse.y = Math.floor( ( (mouse.y * (dh/gh)) * (canvas.height/innerHeight) )/(dh/gh) + ((dh-canvas.height)/2) -(dh/2));
+		if (lmd && !(kWd || kAd || kSd || kDd) )
+		{
+		wantAngle = Math.atan2(tmouse.y, tmouse.x) // Angle the player WANTS to move in
+		xMult = Math.cos(wantAngle)
+		yMult = Math.sin(wantAngle)
+		plyr.addVelocity(xMult, yMult, plyr.speed)
+		
+		}
+		
+		// KEYBOARD Control - Overrides LeftClick but click isn't cancelled, so pressing no keys means LMD Control
+		else
+		{
+		
+		
+		// Close enough to original velocity; at 45 Degrees, you move within 1% margin of error speed
+		// Speeds DO NOT combine, else that's a bug.
+		if (kWd)
+		{
+		
+		if (kAd || kDd)
+		{
+		plyr.addVelocity(0, -0.722, plyr.speed);
+		}
+		else
+		{
+		plyr.addVelocity(0, -1, plyr.speed);
+		}
+		
+		
+		}
+		
+		// If moving backward
+		else if (kSd)
+		{
+		
+		if (kAd || kDd)
+		{
+		plyr.addVelocity(0, 0.722, plyr.speed);
+		}
+		else
+		{
+		plyr.addVelocity(0, 1, plyr.speed);
+		}
+		
+		}
+
+		
+		if (kAd)
+		{
+		
+		if (kWd || kSd)
+		{
+		plyr.addVelocity(-0.722, 0, plyr.speed);
+		}
+		
+		else
+		{
+			plyr.addVelocity(-1, 0, plyr.speed);
+		}
+		
+		
+		}
+		
+		
+		
+		if (kDd)
+		{
+		if (kWd || kSd)
+		{
+		plyr.addVelocity(0.722, 0, plyr.speed);
+		}
+		
+		else
+		{
+			plyr.addVelocity(1, 0, plyr.speed);
+		}
+		}
+		
+		}
+		
+		
+		if (rmd)
+		{
+			
+			wantAngle = Math.atan2(tmouse.y, tmouse.x) // Angle the player WANTS to move in
+			xMult = Math.cos(wantAngle)
+			yMult = Math.sin(wantAngle)
+			
+			// Powerups as Followed
+			// 1 = BORE Powerup: Move fast, blow up rock planets you hit
+			if (plyr.powerup === 1 && rmdTimer === 0)
+			{
+				plyr.bore(40)
+				plyr.addVelocity(xMult, yMult, 15)
+			}
+			
+
+			
+			// 2 = NOGRAV
+			// Activate NOGRAV pull for 2 seconds
+			else if (plyr.powerup === 2)
+			{
+				if (rmdTimer == 0)
+				{
+					plyr.noGravOn()
+				}
+				
+			}
+			
+			
+
+			
+			// 3 = WARP Powerup: Stop time and allow player to teleport anywhere, on teleport, momentum is kept.
+			else if (plyr.powerup === 3 && rmdTimer === 0)
+			{
+				// Freeze Player IF NOT FROZEN
+				if (!plyr.frozen)
+				{
+				plyr.freeze()
+				rmdTimer += 1
+				}
+			}
+			
+			// 4 = BOOST Powerup: General Speed Boost - Very high speed
+			else if (plyr.powerup === 4)
+			{
+				if (rmdTimer === 0)
+				{
+				plyr.xVel = 0
+				plyr.yVel = 0
+				plyr.addVelocity(xMult, yMult, 40)
+				}
+			}
+			
+			
+			
+			// Magic hack for WARP - IF I'm already frozen AND my RMD Timer is 0
+			// Then teleport me to mouse
+			if (plyr.frozen && rmdTimer === 0)
+			{
+			
+				// Unfreeze ONLY if tX or tY are less than 150
+				if (Math.abs(tmouse.x) < 150 && Math.abs(tmouse.y) < 150)
+				{
+					plyr.x -= tmouse.x
+					plyr.y -= tmouse.y
+					plyr.frozen = false;
+				}
+			}
+			
+			rmdTimer += 1
+			if (rmdTimer > 999999)
+			{
+				rmdTimer = 999999
+			}
+
+		}
+		
+		// Set how long we've held RMD to 0
+		else
+		{
+		rmdTimer = 0
+		}
+		
+		
+		
+		plyr.addFriction()
+		plyr.boreTest()
+		plyr.noGravTest()
+		
+		
+		
+
+	
+		// UPD8 - Camera
+		cam.center();
+		
+		
+		
+		// UPD8 - GravityWells
+		for (var i = 0; i < gravityArray.length; i++)
+		{
+			gravityArray[i].onCamera();
+			
+			// If Player is drilling through planet and they're colliding in any way, delete the planet in an explosion
+			// Player will bore for approximately 1 second.
+			if (plyr.boring && gravityArray[i].distToPlayer < gravityArray[i].ir && gravityArray[i].isSolid)
+			{
+				// IF you splice a planet, add speed to the player equal to GForce * 10
+				plyr.addVelocity(xMult, yMult, gravityArray[i].f * 12)
+				gravityArray.splice(i, 1);
+				planetExplode.play()
+			}
+		}
+
+
+		plyr.finalMove();
+		plyr.renderSelf();
+		//plyr.debug();
+		
+		c.fillStyle = "white"
+		if (plyr.powerup === 1)
+		{
+			c.fillText("Current Powerup: Bore - Boost in a straight line, blows up rock planets!" , hx - 170, hy + 20)
+		}
+		
+		else if (plyr.powerup === 2)
+		{
+			c.fillText("Current Powerup: Toggle Gravity - Stop bodies pulling you!" , hx - 140, hy + 20)
+		}
+		
+		else if (plyr.powerup === 3)
+		{
+			c.fillText("Current Powerup: Teleport - Right click to stop time, then click anywhere in the circle to teleport to it!" , hx - 259, hy + 20)
+		}
+		else if (plyr.powerup === 4)
+		{
+			c.fillText("Current Powerup: Boost - Can't destroy planets, but goes REALLY fast!" , hx - 150, hy + 20)
+		}
+		
+		
+		// Draw Direction Arrow IF Not pressing keys OR Frozen in time
+		if (lmd && !plyr.frozen && !(kWd || kAd || kSd || kDd) )
+		{
+			c.beginPath()
+			c.strokeStyle = "#FFAF50"
+			c.moveTo(hx, hy)
+			c.lineTo(hx + tmouse.x, hy + tmouse.y)
+			c.stroke()
+		}
+		
+		// Draw Frozen Circle
+		else if (plyr.frozen)
+		{
+			c.beginPath()
+			c.fillStyle = "#33FF3366"
+			c.arc(hx, hy, 150, 0, 2*Math.PI);
+			c.fill()
+
+			c.beginPath()
+			c.strokeStyle = "#00FF00"
+			c.moveTo(hx + tmouse.x, hy + tmouse.y)
+			c.lineTo(hx + tmouse.x + ((plyr.tVel * 2) * plyr.xVel) , hy + tmouse.y + ((plyr.tVel * 2) * plyr.yVel))
+			c.stroke()
+			
+			c.beginPath()
+			c.fillStyle = "invert"
+			c.arc(hx + tmouse.x, hy + tmouse.y , plyr.width * 2, 0, 2*Math.PI);
+			c.fill()
+		}
+		
+		
+		// Draw HUD Elements
+		
+		hud.renderBoxes()
+		hud.renderPowerups()
+		c.fillStyle = "#00FFAA"
+		c.fillText("Slingshot Gravity Playground Demo!" ,0, 8)
+		for (var i = 0; i < starArray.length; i++)
+		{
+			
+			// Set length of star to be equal to the player's velocity stuff
+			// Yes I know this is technically reverse but it makes a better motionblur
+			
+			if (!plyr.frozen) {
+			if (plyr.xVel > 0)
+			{
+				starW = (plyr.xVel * 3.33 + 1) * (1 - starArray[i].dist)
+				
+			}
+			else
+			{
+				starW = (plyr.xVel * 3.33 - 1) * (1 - starArray[i].dist)
+			}
+			
+			if (plyr.yVel > 0)
+			{
+				starH = (plyr.yVel * 3.33 - + 1) * (1 - starArray[i].dist)
+			}
+			else
+			{
+				starH = (plyr.yVel * 3.33 - - 1) * (1 - starArray[i].dist)
+			}
+			
+			
+			
+			// Starfield loops itself, nobody will notice :)
+			starArray[i].x -= plyr.xVel * (1 - starArray[i].dist)
+			starArray[i].x %= gw
+			
+			// Okay apparantly modulo doesn't loop for 0 values so here's a magic hack
+			if (starArray[i].x < 0)
+			{
+				starArray[i].x += gw
+			}
+			
+
+			starArray[i].y -= plyr.yVel * (1 - starArray[i].dist)
+			starArray[i].y %= gh
+			if (starArray[i].y < 0)
+			{
+				starArray[i].y += gh
+			}
+			}
+			// Draw a star on-screen
+			c.beginPath();
+			c.strokeStyle = "rgba(255, 255, 255, " +starArray[i].life +")"; 
+			c.moveTo(starArray[i].x , starArray[i].y);
+			c.lineTo(starArray[i].x + starW, starArray[i].y  + starH);
+			c.stroke();
+
+			// Slowly drain "life" from the star
+			starArray[i].riseLife(1/ 128)
+			
+			// DEBUGSTRING - Force life to 255
+			//starArray[i].life = 255
+			
+			if (starArray[i].life < 0)
+			{
+				// If screen is zoomed in, thus the star count lowers:
+				if (starArray.length > gh)
+				{
+					starArray.pop()
+				}
+				
+				else if (starArray.length < gh)
+				{
+					starArray.push(new Star(Math.floor(Math.random() * gw), Math.floor(Math.random() * gh), Math.random()));
+				}
+				starArray[i] = new Star(Math.floor(Math.random() * gw), Math.floor(Math.random() * gh), Math.random())
+			}
+		}
+		
+		
+		
+		
+
+		
+
+		
+		
+	}
+
+}
+
+	
+animate()
+	</script>
+
+</body>
+</html>
